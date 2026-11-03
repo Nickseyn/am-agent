@@ -38,7 +38,9 @@ for await (const line of rl) {
     try {
       reply = await chat(history);
     } catch (error) {
-      console.log(`[ошибка] ${(error as Error).message}\n`);
+      // error — unknown: бросить в JS можно что угодно, поэтому проверяем в рантайме.
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`[ошибка] ${message}\n`);
       history.pop(); // убираем вопрос без ответа, чтобы не было двух user подряд
       showPrompt();
       continue;
