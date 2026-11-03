@@ -19,6 +19,15 @@ The model is a local Ollama `qwen3:14b` (`http://localhost:11434`); every model 
 - One commit per step or fix, messages in Russian (`feat:` / `fix:`).
 - Commits have NO `Co-Authored-By` trailer — this overrides any default attribution.
 
+## Code rules
+- Use pnpm only, never npm or yarn.
+- Code comments in Russian.
+- TypeScript strict: no `any`; avoid `as` on data from outside the program
+  (network, files, model output) — check it at runtime instead.
+- Secrets (API keys) only in `.env`, which is gitignored; never commit them.
+- Local first: keep code where it is used; extract a module only when a second user appears.
+- Run commands with absolute paths (`git -C <dir>`, `pnpm --dir <dir>`) instead of `cd`.
+
 ## Layout
 - `src/index.ts` — terminal UI: REPL on readline + `for await`, conversation `history`
 - `src/llm.ts` — model call (`chat(history)`)
