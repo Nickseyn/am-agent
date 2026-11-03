@@ -17,6 +17,7 @@ The model is a local Ollama `qwen3:14b` (`http://localhost:11434`); every model 
   the author finds the cause and proposes the fix, Claude only guides with questions.
 - The author runs the app and does the manual checks.
 - One commit per step or fix, messages in Russian (`feat:` / `fix:`).
+- Commits have NO `Co-Authored-By` trailer — this overrides any default attribution.
 
 ## Layout
 - `src/index.ts` — terminal UI: REPL on readline + `for await`, conversation `history`
