@@ -40,6 +40,14 @@ const MIN_ARROW_PX = 12;
 // Сколько делений подписывать на каждой оси.
 const TICKS = 5;
 
+// Размеры таблицы эмбеддингов qwen3:14b — для сравнения с нашей картой.
+// Источник: `ollama show qwen3:14b --verbose` → token_embd.weight [5120 151936], parameters 14.8B.
+const QWEN_VOCAB = 151_936;
+const QWEN_DIM = 5_120;
+const QWEN_PARAMS = 14.8e9;
+// token_embd у qwen3:14b хранится в формате Q4_K — в среднем около 4.5 бита на число.
+const QWEN_BITS_PER_NUMBER = 4.5;
+
 // Сохраняет HTML с диаграммой на каждый снимок и возвращает найденные группы слов.
 export function saveVectorChart({ vocab, snapshots, outFile, groupDistance, trainingText }: ChartOptions): string[][] {
   const groupOf = findGroups(vocab, snapshots.at(-1)?.points ?? {}, groupDistance);
@@ -75,6 +83,38 @@ export function saveVectorChart({ vocab, snapshots, outFile, groupDistance, trai
     })
     .join("");
 
+  // Карта — это таблица весов: строка на слово, в строке его координаты (итоговый снимок).
+  const finalPoints = snapshots.at(-1)?.points ?? {};
+  const weightRows = vocab
+    .map((w, i) => {
+      const color = COLORS[groupOf[w] % COLORS.length];
+      const p = finalPoints[w];
+      return `<tr><td><span class="badge" style="background:${color}">${i + 1}</span>${w}</td><td>${p.x.toFixed(2)}</td><td>${p.y.toFixed(2)}</td></tr>`;
+    })
+    .join("");
+  // Сравнение размеров: наша таблица считается из данных, у qwen — константы выше.
+  const ourNumbers = vocab.length * 2;
+  const qwenNumbers = QWEN_VOCAB * QWEN_DIM;
+  const qwenShare = Math.round((qwenNumbers / QWEN_PARAMS) * 100);
+  // Наше число — JS number, 8 байт. У qwen эта таблица сжата Q4_K — примерно 4.5 бита на число.
+  const ourBytes = ourNumbers * 8;
+  const qwenMegabytes = Math.round((qwenNumbers * QWEN_BITS_PER_NUMBER) / 8 / 1e6);
+  const timesBigger = Math.round(qwenNumbers / ourNumbers / 1e6);
+  const compareRows = [
+    ["таблица", "out/vectors.json", "token_embd.weight"],
+    ["строк (слов / токенов)", `${vocab.length}`, QWEN_VOCAB.toLocaleString("ru-RU")],
+    ["чисел в строке", "2", QWEN_DIM.toLocaleString("ru-RU")],
+    ["можно нарисовать", "да — точки на плоскости", "нет — 5 120 измерений"],
+    ["всего чисел", `${ourNumbers}`, `≈ ${Math.round(qwenNumbers / 1e6)} млн`],
+    ["во сколько раз больше", "—", `≈ в ${timesBigger} млн раз`],
+    ["одно число", "64-бит дробь (8 байт)", `≈ ${QWEN_BITS_PER_NUMBER} бита (сжатие Q4_K)`],
+    ["размер таблицы", `${ourBytes} байт`, `≈ ${qwenMegabytes} МБ`],
+    ["как получены", `${snapshots.at(-1)?.epoch ?? 0} эпох «притянуть / оттолкнуть»`, "обучение на триллионах токенов"],
+    ["доля от всей модели", "вся модель", `≈ ${qwenShare}% от 14,8 млрд`],
+  ]
+    .map(([name, ours, qwen]) => `<tr><td>${name}</td><td>${ours}</td><td>${qwen}</td></tr>`)
+    .join("");
+
   const html = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Векторы слов</title>
 <style>
@@ -92,11 +132,45 @@ export function saveVectorChart({ vocab, snapshots, outFile, groupDistance, trai
   .training h2 { font-size: 26px; font-weight: 500; margin: 0 0 12px; }
   .training ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 48px; font-size: 26px; line-height: 1.8; }
   .word sup { font-size: 0.55em; margin-left: 2px; opacity: 0.8; }
+  .weights { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 24px; align-items: start; }
+  .card { flex: 1 1 520px; align-self: stretch; padding: 20px 28px; background: ${CHART_BG}; border-radius: 12px; }
+  .card h2 { font-size: 26px; font-weight: 500; margin: 0 0 12px; }
+  .card p { text-align: left; font-size: 20px; margin: 12px 0 0; max-width: 640px; }
+  table { border-collapse: collapse; font-size: 24px; }
+  th { color: ${MUTED}; font-weight: 500; text-align: left; padding: 6px 20px 6px 0; border-bottom: 1px solid ${GRID}; }
+  td { padding: 6px 20px 6px 0; font-variant-numeric: tabular-nums; }
+  .compare td:first-child { color: ${MUTED}; }
+  /* Выделенное допущение модели: приглушённый тёплый оттенок, чтобы плашку читали ПОСЛЕ таблицы, а не вместо неё. */
+  .note { display: flex; gap: 14px; align-items: flex-start; margin-top: 20px; padding: 14px 18px;
+          background: #46423A; border: 1px solid #6B5A3A; border-radius: 12px; }
+  .note b { font-size: 20px; font-weight: 500; color: #D9B77A; }
+  .note p { color: ${MUTED}; margin-top: 6px; }
+  .note-icon { flex: none; width: 26px; height: 26px; line-height: 26px; border-radius: 50%; text-align: center;
+               background: #6B5A3A; color: #E8D5B0; font-size: 17px; font-weight: 600; margin-top: 2px; }
 </style></head><body>
 <h1>Векторы слов: как точки съезжаются в группы</h1>
 <p>Оси одинаковые на всех диаграммах — двигаются только точки. Цвет — группа по итоговой карте (одинаковый на всех диаграммах, чтобы было видно, откуда пришло каждое слово). Точки, стоящие вплотную, подписаны общим списком номеров.</p>
 <div class="row"><ol>${legend}</ol>${charts.join("")}</div>
 <section class="training"><h2>Текст, на котором училась модель</h2><ul>${sentences}</ul></section>
+<section class="weights">
+  <div class="card">
+    <h2>Карта — это таблица весов</h2>
+    <table><tr><th>слово</th><th>x</th><th>y</th></tr>${weightRows}</table>
+    <p>Строка — вектор одного слова. Слово — только адрес строки, веса — числа в ней. Знание хранится во взаимном расположении строк: у похожих слов числа почти совпадают.</p>
+    <div class="note">
+      <span class="note-icon">!</span>
+      <div>
+        <b>Допущение: а где точка?</b>
+        <p>В карте её нет: точка — знак конца предложения, а не слово. Модель-счётчик её предсказывает («после фильмы → . 80%») и по ней останавливает генерацию, но строки «что идёт после точки» нет. У qwen для этого есть специальный невидимый токен <code>&lt;|im_end|&gt;</code>: модель генерирует его, когда ответ закончен, а обычная точка там — такой же токен, как все.</p>
+      </div>
+    </div>
+  </div>
+  <div class="card compare">
+    <h2>Та же таблица у qwen3:14b</h2>
+    <table><tr><th></th><th>наша модель</th><th>qwen3:14b</th></tr>${compareRows}</table>
+    <p>Устроено одинаково: строка на каждый токен словаря. Только в строке не 2 числа, а 5 120 — такое пространство не нарисовать, но близкие строки так же означают похожие токены.</p>
+  </div>
+</section>
 </body></html>`;
 
   mkdirSync(new URL("./", outFile), { recursive: true });

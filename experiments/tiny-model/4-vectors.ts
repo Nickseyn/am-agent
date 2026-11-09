@@ -2,8 +2,10 @@
 // Каждое слово — точка на плоскости (два числа: x и y).
 // Правило: у слов есть общие соседи → притягиваем точки; нет и они слишком близко → отталкиваем.
 // Запуск: pnpm exec tsx experiments/tiny-model/4-vectors.ts
-// Результат: experiments/tiny-model/out/vectors.html — открыть в браузере.
+// Результат: experiments/tiny-model/out/vectors.html — открыть в браузере;
+//            experiments/tiny-model/out/vectors.json — выученная карта для 5-neighbours.ts.
 
+import { writeFileSync } from "node:fs";
 import { saveVectorChart, type Point, type Snapshot } from "./study-tools/vector-chart.ts";
 
 const text = `
@@ -151,3 +153,12 @@ const groups = saveVectorChart({ vocab, snapshots, outFile, groupDistance: GROUP
 console.log("\nГруппы после обучения:");
 groups.forEach((group, i) => console.log(`  группа ${i + 1}: ${group.join(", ")}`));
 console.log(`\nДиаграммы: ${outFile.pathname.replace(/^\/([A-Z]:)/, "$1")}`);
+
+// ---------- Сохранение карты ----------
+// Выученные точки — это «веса» этой модели. Сохраняем их в файл, чтобы другие ступеньки
+// могли ими пользоваться без повторного обучения (как qwen хранит веса в файле на 9 ГБ).
+// Берём последний снимок — ровно ту карту, что нарисована на правой диаграмме.
+const mapFile = new URL("./out/vectors.json", import.meta.url);
+writeFileSync(mapFile, JSON.stringify({ points: snapshots.at(-1)?.points ?? vectors }, null, 2));
+// На выходе: out/vectors.json = { "points": { "я": { "x": 0.05, "y": 1.42 }, ... } }
+console.log(`Карта (веса): ${mapFile.pathname.replace(/^\/([A-Z]:)/, "$1")}`);
