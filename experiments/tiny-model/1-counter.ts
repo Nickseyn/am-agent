@@ -78,7 +78,7 @@ function pick(probs: Record<string, number>): string {
 // На выходе, например:
 // pick({ ".": 0.8, "про": 0.2 }) → "." примерно в 8 запусках из 10, "про" — в 2
 
-// ---------- Генерация: один проход — одно слово ----------
+// ---------- Генерация: один шаг — одно слово ----------
 function generate(start: string): string {
   const result = [start];
   while (result.at(-1) !== "." && result.length < MAX_WORDS) {

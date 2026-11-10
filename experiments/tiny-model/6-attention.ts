@@ -66,7 +66,8 @@ function opinion(voter: string, last: string): Record<string, number> {
 type Mode = "none" | "equal" | "distance" | "meaning" | "meaningDistance";
 
 // Вопросы и метки заданы РУКАМИ — это костыль.
-// В настоящих моделях вопрос (query) и метка (key) — числа, которые модель выучивает сама.
+// В настоящих моделях вопрос (query) и метка (key) вычисляются из вектора слова в этой фразе,
+// а модель выучивает сам способ их вычислять.
 // Вопрос есть только у «очень»: в нашем тексте это единственное место, где лицо стоит далеко от глагола.
 // У слов без вопроса все веса по смыслу одинаковые — как «поровну».
 const QUESTIONS: Record<string, string> = { очень: "лицо" };
@@ -88,7 +89,7 @@ function meaningWeight(voter: string, last: string): number {
 
 // Насколько сильно расстояние гасит вес в режиме «смысл + расстояние».
 // 1 — как в «ближе = больше»: 1, 1/2, 1/3 ...;  0 — расстояние не влияет, остаётся чистый смысл.
-// Опыт: поставь 0.5 — шаг назад будет весить 1 / 1.5 ≈ 0.67 вместо 1/2.
+// Попробуй: поставь 0.5 — шаг назад будет весить 1 / 1.5 ≈ 0.67 вместо 1/2.
 const DISTANCE_STRENGTH = 0.25;
 
 function distanceWeight(stepsBack: number, strength: number): number {
@@ -109,20 +110,21 @@ function weight(mode: Mode, stepsBack: number, voter: string, last: string): num
 // ---------- НОВОЕ: голосование ----------
 // Каждое слово фразы, которую продолжаем (context), даёт мнение, мнения смешиваются по долям.
 // Слова без мнения пропускаем — их доля делится между остальными.
+// Словами README: voter — «друг», advice — его совет (мнение), share — доля внимания (насколько ему верим).
 type Vote = { word: string; share: number };
 
 function attend(context: string[], mode: Mode): { probs: Record<string, number>; votes: Vote[] } {
   const last = context[context.length - 1];
   const voters = context
-    .map((word, i) => ({ word, w: weight(mode, context.length - 1 - i, word, last), op: opinion(word, last) }))
-    .filter((v) => v.w > 0 && Object.keys(v.op).length > 0);
-  const totalWeight = voters.reduce((sum, v) => sum + v.w, 0);
+    .map((word, i) => ({ word, weight: weight(mode, context.length - 1 - i, word, last), advice: opinion(word, last) }))
+    .filter((v) => v.weight > 0 && Object.keys(v.advice).length > 0);
+  const totalWeight = voters.reduce((sum, v) => sum + v.weight, 0);
 
   const probs: Record<string, number> = {};
   for (const v of voters) {
-    for (const [next, p] of Object.entries(v.op)) probs[next] = (probs[next] ?? 0) + p * (v.w / totalWeight);
+    for (const [next, p] of Object.entries(v.advice)) probs[next] = (probs[next] ?? 0) + p * (v.weight / totalWeight);
   }
-  return { probs, votes: voters.map((v) => ({ word: v.word, share: v.w / totalWeight })) };
+  return { probs, votes: voters.map((v) => ({ word: v.word, share: v.weight / totalWeight })) };
 }
 // На выходе, фраза ["ты", "очень"], mode "equal":
 //   votes = [ты 50%, очень 50%]
@@ -203,7 +205,8 @@ for (const context of CASES) {
   }
 }
 
-// Сколько фраз генерируем на каждый режим и каждое начало. 5 — лотерея, 1000 — уже статистика.
+// Сколько фраз генерируем на каждый режим и каждое начало.
+// 5 — лотерея, 1000 — числа ещё прыгают на несколько пунктов, 20 000 — разброс меньше пункта.
 const RUNS = 20000;
 
 console.log(`\nОшибки лица в генерации (по ${RUNS} фраз на каждое начало):`);
